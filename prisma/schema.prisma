@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String?
+  candidateProfile CandidateProfile?
+  jobs             Job[]
+  applications     Application[]
+  gmailConnection  GmailConnection?
+  gmailMessages    GmailMessage[]
+  emailActions     EmailAction[]
+  searchRuns       JobSearchRun[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model JobSearchRun {
+  id          String   @id @default(cuid())
+  userId      String
+  source      String
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  resultCount Int      @default(0)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, source, startedAt])
+}
+
+model CandidateProfile {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  targetRoles            String[]
+  skills                 String[]
+  searchKeywords         String[]
+  experienceSummary      String?
+  preferredLocations     String[]
+  workModes              String[]
+  minimumSalary          Int?
+  compensationPreference String?
+  constraints            String?
+  profileSummary         String?
+  resumeFileName         String?
+  resumeText             String?
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model Job {
+  id           String        @id @default(cuid())
+  userId       String
+  company      String
+  role         String
+  url          String?
+  description  String
+  salary       String?
+  location     String?
+  source       String         @default("Indeed")
+  postedAt     String?
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis     JobAnalysis?
+  applications Application[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model JobAnalysis {
+  id             String   @id @default(cuid())
+  jobId          String   @unique
+  matchScore     Int
+  recommendation String
+  strengths      String[]
+  gaps           String[]
+  concerns       String[]
+  reasoning      String
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Application {
+  id        String    @id @default(cuid())
+  userId    String
+  jobId     String
+  status    String    @default("SAVED")
+  appliedAt DateTime?
+  notes     String?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, jobId])
+}
+
+model GmailConnection {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  gmailAddress          String
+  refreshTokenEncrypted String
+  scope                 String
+  lastSyncedAt          DateTime?
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model GmailMessage {
+  id             String   @id @default(cuid())
+  userId         String
+  gmailMessageId String   @unique
+  threadId       String
+  sender         String?
+  subject        String?
+  snippet        String?
+  category       String
+  labelIds       String[]
+  isUnread       Boolean  @default(false)
+  threadHasReply Boolean  @default(false)
+  receivedAt     DateTime?
+  action         EmailAction?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, receivedAt])
+}
+
+model EmailAction {
+  id             String   @id @default(cuid())
+  userId         String
+  gmailMessageId String   @unique
+  actionType     String
+  priority       Int
+  priorityReason String
+  draftText      String?
+  draftModel     String?
+  status         String   @default("OPEN")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gmailMessage   GmailMessage @relation(fields: [gmailMessageId], references: [gmailMessageId], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, status, priority])
+}
