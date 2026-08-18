@@ -4,7 +4,10 @@ import { createRequire } from "module";
 export const runtime = "nodejs";
 const require = createRequire(import.meta.url);
 const mammoth = require("mammoth");
-const parsePdf = require("pdf-parse");
+// Import the parser implementation directly. The package's top-level v1
+// entrypoint contains a debug block that Next.js can execute while collecting
+// route metadata, causing builds to look for the package's test PDF.
+const parsePdf = require("pdf-parse/lib/pdf-parse.js");
 
 function normalizeText(value: string) {
   return value
