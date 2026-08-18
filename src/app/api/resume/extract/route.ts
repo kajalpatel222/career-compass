@@ -4,6 +4,7 @@ import { createRequire } from "module";
 export const runtime = "nodejs";
 const require = createRequire(import.meta.url);
 const mammoth = require("mammoth");
+const { PDFParse } = require("pdf-parse");
 
 function normalizeText(value: string) {
   return value
@@ -14,32 +15,15 @@ function normalizeText(value: string) {
 }
 
 async function extractPdfText(buffer: Buffer) {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(buffer),
-    useWorkerFetch: false,
-    disableFontFace: true,
-    verbosity: 0,
-  });
-
-  const pdf = await loadingTask.promise;
-  const chunks: string[] = [];
-
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const textContent = (await page.getTextContent()) as {
-      items: Array<{ str?: string }>;
-    };
-    const pageText = textContent.items
-      .map((item) => item.str || "")
-      .join(" ");
-    if (pageText.trim()) {
-      chunks.push(pageText);
-    }
+  // pdf-parse provides a Node-safe parser. Importing pdfjs-dist directly causes
+  // Vercel's Node runtime to evaluate browser-only DOM globals such as DOMMatrix.
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getText();
+    return result.text || "";
+  } finally {
+    await parser.destroy();
   }
-
-  await loadingTask.destroy();
-  return chunks.join("\n");
 }
 
 export async function POST(request: Request) {
