@@ -1,4 +1,4 @@
-# Personal Assistant
+# Career Compass
 
 An AI-assisted job-search workspace: discover roles, score fit against a resume, track applications, and prioritize job-related Gmail actions.
 
