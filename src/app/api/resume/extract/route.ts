@@ -4,7 +4,7 @@ import { createRequire } from "module";
 export const runtime = "nodejs";
 const require = createRequire(import.meta.url);
 const mammoth = require("mammoth");
-const { PDFParse } = require("pdf-parse");
+const parsePdf = require("pdf-parse");
 
 function normalizeText(value: string) {
   return value
@@ -15,15 +15,10 @@ function normalizeText(value: string) {
 }
 
 async function extractPdfText(buffer: Buffer) {
-  // pdf-parse provides a Node-safe parser. Importing pdfjs-dist directly causes
-  // Vercel's Node runtime to evaluate browser-only DOM globals such as DOMMatrix.
-  const parser = new PDFParse({ data: buffer });
-  try {
-    const result = await parser.getText();
-    return result.text || "";
-  } finally {
-    await parser.destroy();
-  }
+  // pdf-parse v1 uses the Node-compatible PDF.js build. Newer builds expect
+  // browser DOM globals (such as DOMMatrix) during Vercel module evaluation.
+  const result = await parsePdf(buffer);
+  return result.text || "";
 }
 
 export async function POST(request: Request) {
