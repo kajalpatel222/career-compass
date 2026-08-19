@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { decryptRefreshToken, refreshAccessToken } from "@/lib/gmail";
+import { triageEmailActionsWithLLM } from "@/lib/gmail-actions";
 
 const DEMO_EMAIL = "demo@personal-assistant.local";
-const JOB_MAIL_QUERY = "newer_than:365d {\"application received\" \"thank you for applying\" \"job application\" \"next steps\" \"hiring team\" interview recruiter \"job opportunity\" from:linkedin.com from:greenhouse.io from:lever.co from:ashbyhq.com}";
+const JOB_MAIL_QUERY = "newer_than:365d {interview recruiter hiring \"new opportunity\" \"job opportunity\" \"would love to chat\" \"next steps\" \"hiring team\" assessment \"coding challenge\" offer \"job application\" from:linkedin.com from:greenhouse.io from:lever.co from:ashbyhq.com}";
 
 type GmailMessageList = { messages?: { id: string; threadId: string }[] };
 type GmailMessage = {
@@ -40,7 +41,7 @@ export async function POST() {
     if (!user?.gmailConnection) return NextResponse.json({ error: "Connect Gmail before syncing." }, { status: 404 });
 
     const accessToken = (await refreshAccessToken(decryptRefreshToken(user.gmailConnection.refreshTokenEncrypted))).access_token!;
-    const listResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${new URLSearchParams({ q: JOB_MAIL_QUERY, maxResults: "50" })}`, { headers: { authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+    const listResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${new URLSearchParams({ q: JOB_MAIL_QUERY, maxResults: "100" })}`, { headers: { authorization: `Bearer ${accessToken}` }, cache: "no-store" });
     if (!listResponse.ok) return NextResponse.json({ error: "Gmail could not list job-related messages." }, { status: 502 });
     const listed = await listResponse.json() as GmailMessageList;
     const items = listed.messages || [];
@@ -81,8 +82,25 @@ export async function POST() {
         create: { userId: user.id, gmailMessageId: message.id, threadId: message.threadId, sender: header(message, "From"), subject, snippet, category: category(subject, snippet), labelIds, isUnread, threadHasReply, receivedAt },
       });
     }));
+    const gmailMessageIds = messages.map((message) => message.id);
+    const savedMessages = await prisma.gmailMessage.findMany({ where: { userId: user.id, gmailMessageId: { in: gmailMessageIds } } });
+    const plans = await triageEmailActionsWithLLM(savedMessages);
+    const actionable = savedMessages.filter((message) => plans.get(message.gmailMessageId));
+    const excluded = savedMessages.filter((message) => plans.get(message.gmailMessageId) === null);
+
+    await Promise.all([
+      ...actionable.map((message) => {
+        const plan = plans.get(message.gmailMessageId)!;
+        return prisma.emailAction.upsert({
+          where: { gmailMessageId: message.gmailMessageId },
+          update: { actionType: plan.actionType, priority: plan.priority, priorityReason: plan.priorityReason, status: "OPEN" },
+          create: { userId: user.id, gmailMessageId: message.gmailMessageId, actionType: plan.actionType, priority: plan.priority, priorityReason: plan.priorityReason },
+        });
+      }),
+      ...(excluded.length ? [prisma.emailAction.deleteMany({ where: { gmailMessageId: { in: excluded.map((message) => message.gmailMessageId) } } })] : []),
+    ]);
     await prisma.gmailConnection.update({ where: { userId: user.id }, data: { lastSyncedAt: new Date() } });
-    return NextResponse.json({ scanned: items.length, synced: messages.length, query: JOB_MAIL_QUERY });
+    return NextResponse.json({ scanned: items.length, synced: messages.length, actionable: actionable.length, query: JOB_MAIL_QUERY });
   } catch (error) {
     console.error("[gmail] sync failed", error);
     return NextResponse.json({ error: "Gmail sync failed. Reconnect Gmail and try again." }, { status: 502 });

@@ -12,9 +12,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL }, include: { gmailConnection: true } });
     if (!user) return NextResponse.json({ error: "No local user exists yet." }, { status: 404 });
-    const message = await prisma.gmailMessage.findFirst({ where: { userId: user.id, gmailMessageId: body.gmailMessageId } });
+    const message = await prisma.gmailMessage.findFirst({ where: { userId: user.id, gmailMessageId: body.gmailMessageId }, include: { action: true } });
     if (!message) return NextResponse.json({ error: "Job email was not found." }, { status: 404 });
-    const plan = planEmailAction(message);
+    const plan = message.action ? { actionType: message.action.actionType as "REPLY" | "FOLLOW_UP" | "REVIEW", priority: message.action.priority, priorityReason: message.action.priorityReason } : planEmailAction(message);
     if (!plan || plan.actionType === "REVIEW") return NextResponse.json({ error: "This message does not need a reply draft." }, { status: 400 });
     if (!user.gmailConnection) return NextResponse.json({ error: "Connect Gmail before generating a draft." }, { status: 404 });
     const draft = await generateReplyDraft({ actionType: plan.actionType, sender: message.sender, subject: message.subject, snippet: message.snippet, signatureName: process.env.CANDIDATE_NAME || "Kajal Patel", signatureEmail: user.gmailConnection.gmailAddress });

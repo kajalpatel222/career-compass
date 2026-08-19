@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
-const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_SCOPES = [GMAIL_SCOPE, CALENDAR_SCOPE];
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 type GoogleTokenResponse = {
@@ -33,7 +35,7 @@ export function createGmailAuthorizationUrl(state: string) {
   url.searchParams.set("client_id", requiredEnv("GOOGLE_CLIENT_ID"));
   url.searchParams.set("redirect_uri", requiredEnv("GOOGLE_REDIRECT_URI"));
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", GMAIL_SCOPE);
+  url.searchParams.set("scope", GOOGLE_SCOPES.join(" "));
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("prompt", "consent");
   url.searchParams.set("state", state);
@@ -100,4 +102,8 @@ export function decryptRefreshToken(value: string) {
 
 export function createOAuthState() {
   return randomBytes(32).toString("base64url");
+}
+
+export function hasGoogleScope(scope: string | null | undefined, requiredScope: string) {
+  return Boolean(scope?.split(/\s+/).includes(requiredScope));
 }

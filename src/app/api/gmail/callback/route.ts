@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { encryptRefreshToken, exchangeAuthorizationCode, gmailAddress, isGmailConfigured } from "@/lib/gmail";
+import { encryptRefreshToken, exchangeAuthorizationCode, gmailAddress, GMAIL_SCOPE, isGmailConfigured } from "@/lib/gmail";
 
 const DEMO_EMAIL = "demo@personal-assistant.local";
 export const runtime = "nodejs";
 
 function redirect(request: NextRequest, gmail: "connected" | "error", reason?: string) {
-  const url = new URL("/", request.url);
+  const storedReturnTo = request.cookies.get("google_oauth_return_to")?.value;
+  const returnTo = storedReturnTo?.startsWith("/") && !storedReturnTo.startsWith("//") ? storedReturnTo : "/";
+  const url = new URL(returnTo, request.url);
   url.searchParams.set("gmail", gmail);
   if (reason) url.searchParams.set("gmailReason", reason);
   return NextResponse.redirect(url);
@@ -28,11 +30,12 @@ export async function GET(request: NextRequest) {
     const user = await prisma.user.upsert({ where: { email: DEMO_EMAIL }, update: {}, create: { email: DEMO_EMAIL } });
     await prisma.gmailConnection.upsert({
       where: { userId: user.id },
-      update: { gmailAddress: address, refreshTokenEncrypted: encryptRefreshToken(tokens.refresh_token), scope: tokens.scope || "https://www.googleapis.com/auth/gmail.readonly" },
-      create: { userId: user.id, gmailAddress: address, refreshTokenEncrypted: encryptRefreshToken(tokens.refresh_token), scope: tokens.scope || "https://www.googleapis.com/auth/gmail.readonly" },
+      update: { gmailAddress: address, refreshTokenEncrypted: encryptRefreshToken(tokens.refresh_token), scope: tokens.scope || GMAIL_SCOPE },
+      create: { userId: user.id, gmailAddress: address, refreshTokenEncrypted: encryptRefreshToken(tokens.refresh_token), scope: tokens.scope || GMAIL_SCOPE },
     });
     const response = redirect(request, "connected");
     response.cookies.delete("gmail_oauth_state");
+    response.cookies.delete("google_oauth_return_to");
     return response;
   } catch (callbackError) {
     console.error("[gmail] OAuth callback failed", callbackError);

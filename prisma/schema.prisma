@@ -18,8 +18,29 @@ model User {
   gmailMessages    GmailMessage[]
   emailActions     EmailAction[]
   searchRuns       JobSearchRun[]
+  plannerItems     PlannerItem[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+}
+
+model PlannerItem {
+  id              String    @id @default(cuid())
+  userId          String
+  title           String
+  details         String?
+  status          String    @default("INBOX")
+  source          String    @default("MANUAL")
+  sourceId        String?
+  priority        Int       @default(50)
+  durationMinutes Int       @default(30)
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId, status, scheduledStart])
+  @@index([userId, source, sourceId])
 }
 
 model JobSearchRun {

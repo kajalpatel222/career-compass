@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { planEmailAction } from "@/lib/gmail-actions";
 
 const DEMO_EMAIL = "demo@personal-assistant.local";
 export const runtime = "nodejs";
@@ -12,8 +11,7 @@ export async function GET() {
     const messages = await prisma.gmailMessage.findMany({ where: { userId: user.id }, include: { action: true }, orderBy: { receivedAt: "desc" } });
     const actions = messages
       .map((message) => {
-        const plan = planEmailAction(message);
-        if (!plan || message.action?.status === "DONE") return null;
+        if (!message.action || message.action.status === "DONE") return null;
         return {
           id: message.id,
           gmailMessageId: message.gmailMessageId,
@@ -24,7 +22,9 @@ export async function GET() {
           category: message.category,
           isUnread: message.isUnread,
           receivedAt: message.receivedAt,
-          ...plan,
+          actionType: message.action.actionType as "REPLY" | "FOLLOW_UP" | "REVIEW",
+          priority: message.action.priority,
+          priorityReason: message.action.priorityReason,
           draftText: message.action?.draftText || null,
           draftModel: message.action?.draftModel || null,
         };
